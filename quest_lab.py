@@ -1,4 +1,5 @@
 """Offline family maker missions. Standard library only."""
+from html import escape
 import argparse
 import itertools
 import json
@@ -98,19 +99,58 @@ def markdown(result):
     return '\n'.join(lines) + '\n'
 
 
+def html_cards(result):
+    """Render a portable, script-free worksheet; escape all activity text."""
+    e = lambda value: escape(str(value), quote=True)
+    parts = ["<!doctype html><html lang='en'><meta charset='utf-8'>",
+             "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+             "<title>Backyard Quest Lab — Mission cards</title>",
+             """<style>
+body{font:17px/1.55 system-ui,sans-serif;color:#19382e;background:#f5f3e9;margin:0}
+main{max-width:850px;margin:auto;padding:32px 20px}h1{font-size:2.5rem;line-height:1.1}
+h2{line-height:1.2}article{background:white;border:1px solid #bccbbf;border-radius:14px;padding:28px;margin:24px 0}
+.tag{font-weight:700;color:#386446}.care{border-left:4px solid #a97518;padding-left:16px}
+.write{display:block;border-bottom:1px solid #8e9f94;min-height:44px;margin-top:12px}
+li{margin:8px 0}.note{color:#476354}footer{font-size:.9rem}
+@media(max-width:500px){main{padding:20px 12px}article{padding:18px}h1{font-size:2rem}}
+@media print{@page{margin:15mm}body{background:white;font-size:11pt}main{max-width:none;padding:0}article{break-before:page;border:0;border-radius:0;padding:0;margin:0}h2,h3{break-after:avoid}li,.care,.write{break-inside:avoid}.screen{display:none}}
+</style><main><header><p class='tag'>MAKE · TRY · DISCOVER</p><h1>Backyard Quest Lab</h1>""",
+             f"<p>Activity time: {e(result['minutes'])} minutes · Unused budget: {e(result['remaining'])} minutes</p>",
+             "<p>Allow extra time for setup and cleanup. An adult should choose activities suited to the participants.</p>",
+             "<p class='screen note'>Use your browser’s Print command. Each mission starts on a new printed page.</p></header>"]
+    if not result['quests']:
+        parts.append('<p>No missions match these constraints. See the reasons below.</p>')
+    for q in result['quests']:
+        parts.extend([f"<article><p class='tag'>{e(q['minutes'])} MIN · {e(q['space']).upper()}</p><h2>{e(q['title'])}</h2>",
+                      f"<p>{e(q['challenge'])}</p><p><strong>Materials:</strong> {e(', '.join(q['materials']))}</p>",
+                      f"<h3>Predict</h3><p>{e(q['predict'])}</p><h3>Build and test</h3><ol>"])
+        parts.extend('<li>' + e(step) + '</li>' for step in q['steps'])
+        parts.extend([f"</ol><h3>Measure</h3><p>{e(q['measure'])}</p><h3>Reflect</h3><p>{e(q['reflect'])}</p>",
+                      f"<p class='care'><strong>Care:</strong> {e(q['care'])}</p>",
+                      "<div class='write'>Our prediction:</div><div class='write'>What happened:</div><div class='write'>Next change:</div></article>"])
+    if result['excluded']:
+        parts.append('<section><h2>Not included</h2><ul>')
+        parts.extend('<li>' + e(x['id']) + ': ' + e('; '.join(x['reasons'])) + '</li>' for x in result['excluded'])
+        parts.append('</ul></section>')
+    parts.append('<footer>Original family maker missions · No accounts or network access needed.</footer></main></html>')
+    return '\n'.join(parts) + '\n'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--materials', nargs='+', choices=MATERIALS, required=True)
     parser.add_argument('--minutes', type=int, required=True)
     parser.add_argument('--space', choices=['table', 'floor', 'both'], required=True)
     parser.add_argument('--adult', action='store_true', help='An adult will participate in activities that require it')
-    parser.add_argument('--json', action='store_true', help='Output structured plan instead of printable Markdown')
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument('--html', action='store_true', help='Output standalone printable HTML cards')
+    output.add_argument('--json', action='store_true', help='Output structured plan instead of printable Markdown')
     args = parser.parse_args()
     try:
         result = plan(args.materials, args.minutes, args.space, args.adult)
     except ValueError as exc:
         parser.error(str(exc))
-    print(json.dumps(result, indent=2) if args.json else markdown(result), end='\n' if args.json else '')
+    print(json.dumps(result, indent=2) if args.json else html_cards(result) if args.html else markdown(result), end='\n' if args.json else '')
 
 
 if __name__ == '__main__':

@@ -4,7 +4,8 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
-from quest_lab import MATERIALS, QUESTS, markdown, plan
+from quest_lab import MATERIALS, QUESTS, markdown, plan, html_cards
+import copy
 
 class PlanningTests(unittest.TestCase):
     def test_constraints_across_catalog(self):
@@ -34,6 +35,26 @@ class PlanningTests(unittest.TestCase):
         self.assertIn('needs adult participation', reasons)
         self.assertIn('needs floor space', reasons)
         self.assertIn('No missions match', markdown(result))
+    def test_html_escaping_and_content(self):
+        result = copy.deepcopy(plan(['paper', 'blocks'], 30, 'table'))
+        result['quests'][0]['title'] = '<script>alert("x")</script>'
+        result['excluded'][0]['reasons'] = ['<unsafe> & text']
+        page = html_cards(result)
+        self.assertNotIn('<script>', page)
+        self.assertIn('&lt;script&gt;', page)
+        self.assertIn('&lt;unsafe&gt; &amp; text', page)
+        self.assertEqual(page.count('<article>'), 2)
+        self.assertIn('Our prediction:', page)
+        self.assertIn('No missions match', html_cards(plan([], 1, 'table')))
+
+    def test_html_cli_and_exclusive_flags(self):
+        script = str(Path(__file__).with_name('quest_lab.py'))
+        args = [sys.executable, script, '--materials', 'paper', '--minutes', '10', '--space', 'floor', '--adult', '--html']
+        result = subprocess.run(args, capture_output=True, text=True, check=True)
+        self.assertTrue(result.stdout.startswith('<!doctype html>'))
+        self.assertIn('Human Robot Rescue', result.stdout)
+        self.assertEqual(subprocess.run(args + ['--json'], capture_output=True).returncode, 2)
+
     def test_invalid_input(self):
         for minutes in (0, -1, True, 1.5):
             with self.assertRaises(ValueError): plan([], minutes, 'both')
