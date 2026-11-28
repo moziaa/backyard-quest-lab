@@ -17,7 +17,7 @@ Open the generated Markdown in a Markdown viewer to print the mission cards. Out
 
 ## How it chooses
 
-Four original mission cards: Paper Bridge Engineers, Slow-Roll Goal Lab, Human Robot Rescue, and Shadow Stadium. Filter by available materials, table/floor space, and whether an adult participates. The planner finds the combination that uses the most activity minutes without exceeding the **shared** budget. Ties use catalog order and fewer missions. Every omitted activity has an explanation, including eligible activities left out by the shared budget. Time estimates exclude setup and cleanup.
+Four original mission cards: Paper Bridge Engineers, Slow-Roll Goal Lab, Human Robot Rescue, and Shadow Stadium. Filter by available materials, table/floor space, and whether an adult participates. The planner finds the combination that uses the most activity minutes without exceeding the **shared** budget. Ties use catalog order and fewer missions. Every omitted activity has an explanation, including eligible activities left out by the shared budget. Activity estimates exclude setup and cleanup; reserve a per-mission allowance with `--buffer`.
 
 `--adult` enables activities requiring active adult participation. Without it, an adult should still choose activities appropriate to the participants. No age suitability or safety certification is claimed. Cards include practical care notes and an eyes-open, walking-only robot activity with a seated adaptation. No real child data is collected.
 
@@ -34,3 +34,7 @@ python quest_lab.py --materials paper blocks --minutes 30 --space table --html >
 ```
 
 Open the HTML file in a browser and use Print. The cover summarizes time; each mission starts on a new printed page with prompts and writing space. Pagination depends on paper size and browser settings. Cards work offline with no scripts or external assets. `--html` and `--json` are mutually exclusive. Shell redirection may overwrite an existing file.
+
+## Leave time to set up and tidy up
+
+Add `--buffer 5` to reserve five minutes per selected mission within the shared budget. A 30-minute table session with paper and blocks then selects one 15-minute activity plus five minutes of allowance, leaving ten minutes unused. At 40 minutes, both 15-minute activities fit with their allowances. The planner still maximizes **activity** minutes, not buffer time. Default zero preserves previous selection behavior. Markdown, HTML and JSON distinguish activity time, allowance, total planned time and unused budget. Estimates are not guarantees.

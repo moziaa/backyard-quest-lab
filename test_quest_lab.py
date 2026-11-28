@@ -55,6 +55,28 @@ class PlanningTests(unittest.TestCase):
         self.assertIn('Human Robot Rescue', result.stdout)
         self.assertEqual(subprocess.run(args + ['--json'], capture_output=True).returncode, 2)
 
+    def test_buffer_changes_selection_and_accounting(self):
+        result = plan(['paper', 'blocks'], 30, 'table', buffer=5)
+        self.assertEqual(len(result['quests']), 1)
+        self.assertEqual((result['minutes'], result['buffer_minutes'], result['total_minutes'], result['remaining']), (15, 5, 20, 10))
+        self.assertEqual(plan(['paper','blocks'], 40, 'table', buffer=5)['total_minutes'], 40)
+        empty = plan(['paper','blocks'], 19, 'table', buffer=5)
+        self.assertEqual(empty['buffer_minutes'], 0)
+        self.assertEqual(empty['remaining'], 19)
+        self.assertIn('20 minutes including buffer', str(empty['excluded']))
+        self.assertIn('setup/cleanup allowance: 5', markdown(result))
+        self.assertIn('Setup/cleanup: 5', html_cards(result))
+        for value in (-1, True, 1.5):
+            with self.assertRaises(ValueError): plan([], 30, 'table', buffer=value)
+
+    def test_buffer_cli(self):
+        script = str(Path(__file__).with_name('quest_lab.py'))
+        args = [sys.executable, script, '--materials', 'paper', 'blocks', '--minutes', '30', '--space', 'table', '--buffer', '5', '--json']
+        result = subprocess.run(args, capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['total_minutes'], 20)
+        args[args.index('5')] = '-1'
+        self.assertEqual(subprocess.run(args, capture_output=True).returncode, 2)
+
     def test_invalid_input(self):
         for minutes in (0, -1, True, 1.5):
             with self.assertRaises(ValueError): plan([], minutes, 'both')

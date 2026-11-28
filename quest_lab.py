@@ -41,10 +41,12 @@ QUESTS = [
 MATERIALS = sorted({m for q in QUESTS for m in q['materials']})
 
 
-def plan(materials, minutes, space, adult=False):
+def plan(materials, minutes, space, adult=False, buffer=0):
     """Maximize activity minutes without exceeding the budget; deterministic ties."""
     if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes < 1:
         raise ValueError('minutes must be a positive integer')
+    if isinstance(buffer, bool) or not isinstance(buffer, int) or buffer < 0:
+        raise ValueError('buffer must be a nonnegative integer')
     if space not in ('table', 'floor', 'both'):
         raise ValueError('space must be table, floor, or both')
     supplied = set(materials)
@@ -61,8 +63,8 @@ def plan(materials, minutes, space, adult=False):
             reasons.append('needs ' + q['space'] + ' space')
         if q['adult'] and not adult:
             reasons.append('needs adult participation')
-        if q['minutes'] > minutes:
-            reasons.append('needs at least ' + str(q['minutes']) + ' minutes')
+        if q['minutes'] + buffer > minutes:
+            reasons.append('needs at least ' + str(q['minutes'] + buffer) + ' minutes including buffer')
         if reasons:
             excluded.append(dict(id=q['id'], reasons=reasons))
         else:
@@ -72,18 +74,20 @@ def plan(materials, minutes, space, adult=False):
     for size in range(1, len(eligible) + 1):
         for selection in itertools.combinations(eligible, size):
             total = sum(q['minutes'] for q in selection)
-            if used < total <= minutes:
+            if used < total and total + size * buffer <= minutes:
                 best, used = selection, total
     selected_ids = {q['id'] for q in best}
     excluded.extend(dict(id=q['id'], reasons=['not selected within the shared time budget'])
                     for q in eligible if q['id'] not in selected_ids)
-    return dict(minutes=used, remaining=minutes-used, quests=list(best), excluded=excluded)
+    return dict(minutes=used, buffer_per_mission=buffer, buffer_minutes=len(best)*buffer,
+                total_minutes=used+len(best)*buffer, remaining=minutes-used-len(best)*buffer,
+                quests=list(best), excluded=excluded)
 
 
 def markdown(result):
     lines = ['# Backyard Quest Lab', '',
-             f"Activity time: {result['minutes']} minutes; unused budget: {result['remaining']} minutes.",
-             'Allow extra time for setup and cleanup. An adult should choose activities suited to the participants.', '']
+             f"Activity time: {result['minutes']} minutes; setup/cleanup allowance: {result['buffer_minutes']} minutes; total: {result['total_minutes']} minutes; unused budget: {result['remaining']} minutes.",
+             'Setup/cleanup allowance is an estimate; adjust it for your family. An adult should choose activities suited to the participants.', '']
     if not result['quests']:
         lines += ['No missions match these constraints. See the reasons below.', '']
     for q in result['quests']:
@@ -115,8 +119,8 @@ li{margin:8px 0}.note{color:#476354}footer{font-size:.9rem}
 @media(max-width:500px){main{padding:20px 12px}article{padding:18px}h1{font-size:2rem}}
 @media print{@page{margin:15mm}body{background:white;font-size:11pt}main{max-width:none;padding:0}article{break-before:page;border:0;border-radius:0;padding:0;margin:0}h2,h3{break-after:avoid}li,.care,.write{break-inside:avoid}.screen{display:none}}
 </style><main><header><p class='tag'>MAKE · TRY · DISCOVER</p><h1>Backyard Quest Lab</h1>""",
-             f"<p>Activity time: {e(result['minutes'])} minutes · Unused budget: {e(result['remaining'])} minutes</p>",
-             "<p>Allow extra time for setup and cleanup. An adult should choose activities suited to the participants.</p>",
+             f"<p>Activity time: {e(result['minutes'])} minutes · Setup/cleanup: {e(result['buffer_minutes'])} minutes · Total: {e(result['total_minutes'])} minutes · Unused budget: {e(result['remaining'])} minutes</p>",
+             "<p>Setup/cleanup allowance is an estimate; adjust it for your family. An adult should choose activities suited to the participants.</p>",
              "<p class='screen note'>Use your browser’s Print command. Each mission starts on a new printed page.</p></header>"]
     if not result['quests']:
         parts.append('<p>No missions match these constraints. See the reasons below.</p>')
@@ -141,13 +145,14 @@ def main():
     parser.add_argument('--materials', nargs='+', choices=MATERIALS, required=True)
     parser.add_argument('--minutes', type=int, required=True)
     parser.add_argument('--space', choices=['table', 'floor', 'both'], required=True)
+    parser.add_argument('--buffer', type=int, default=0, help='Setup/cleanup minutes reserved per selected mission (default: 0)')
     parser.add_argument('--adult', action='store_true', help='An adult will participate in activities that require it')
     output = parser.add_mutually_exclusive_group()
     output.add_argument('--html', action='store_true', help='Output standalone printable HTML cards')
     output.add_argument('--json', action='store_true', help='Output structured plan instead of printable Markdown')
     args = parser.parse_args()
     try:
-        result = plan(args.materials, args.minutes, args.space, args.adult)
+        result = plan(args.materials, args.minutes, args.space, args.adult, args.buffer)
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2) if args.json else html_cards(result) if args.html else markdown(result), end='\n' if args.json else '')
